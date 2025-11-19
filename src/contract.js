@@ -2,7 +2,7 @@ import Web3 from 'web3';
 
 const web3 = new Web3(window.ethereum);
 
-const contractAddress = '0xBFbA8983272cC812834d36c3bB7AD189be9B3dab'; // Replace with your deployed contract address
+const contractAddress = '0xd7EA1A8C72000007f7474b6784813441680e842D'; // Replace with your deployed contract address
 
 const contractABI = [
   {

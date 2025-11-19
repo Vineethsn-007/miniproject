@@ -2,14 +2,50 @@ import React, { useState, useEffect } from 'react';
 import { uploadFileToPinata } from './ipfs';
 import notesReward from './contract';
 
+// COLOR PALETTE
+const COLORS = {
+  aqua: "#66C5CC",
+  yellow: "#F6CF71",
+  peach: "#F89C74",
+  gray: "#B3B3B3",
+  white: "#FFFFFF",
+  black: "#222222"
+};
+
+// Loader CSS inline for central loader
+const loaderStyle = `
+.circle-loader {
+  display: block;
+  margin: 0 auto;
+  border: 6px solid #F6CF71;
+  border-radius: 50%;
+  border-top: 6px solid #66C5CC;
+  width: 60px; height: 60px;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+`;
+
+const fileIcon = (name) => {
+  const ext = name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return '📄';
+  if (['doc', 'docx'].includes(ext)) return '📝';
+  if (['png', 'jpg', 'jpeg'].includes(ext)) return '🖼️';
+  if (['txt'].includes(ext)) return '📃';
+  return '📁';
+};
+
 function App() {
   const [account, setAccount] = useState('');
   const [file, setFile] = useState(null);
   const [filename, setFilename] = useState('');
   const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(false); // for loading notes
-  const [uploading, setUploading] = useState(false); // for uploading
-  const [actionIndex, setActionIndex] = useState(null); // for button spinner
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [actionIndex, setActionIndex] = useState(null);
+  const [search, setSearch] = useState('');
 
   const connectWallet = async () => {
     if (!window.ethereum) {
@@ -91,197 +127,391 @@ function App() {
     setActionIndex(null);
   };
 
+  const filteredNotes = notes.filter(note =>
+    note.filename.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const downloadNote = (ipfsHash, filename) => {
+    const url = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'note';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // Stats bar
+  const stats = {
+    notes: notes.length,
+    totalLikes: notes.reduce((a, b) => a + b.likes, 0),
+    totalDislikes: notes.reduce((a, b) => a + b.dislikes, 0)
+  };
+
   return (
     <div style={{
-      maxWidth: 900,
-      margin: '2rem auto',
+      width: '100vw',
+      minHeight: '100vh',
+      background: COLORS.white,
+      position: 'relative',
+      overflow: 'auto',
       fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-      padding: '1.5rem',
-      backgroundColor: '#fff',
-      boxShadow: '0 12px 24px rgba(0,0,0,0.08)',
-      borderRadius: 24,
-      color:"black"
     }}>
-      <header style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        marginBottom: '2rem',
-      }}>
-        <h1 style={{
-          fontWeight: '800',
-          fontSize: '2.5rem',
-          margin: 0,
-          color: '#222'
+      <style>{loaderStyle}</style>
+
+      {loading && (
+        <div style={{
+          position: "fixed",
+          top: 0, left: 0, width: "100vw", height: "100vh",
+          background: "rgba(246,207,113,0.17)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 1000
         }}>
-          Notes Sharing DApp
-        </h1>
-        {account ? (
-          <span style={{
-            backgroundColor: '#00b894',
-            color: '#fff',
-            fontWeight: 700,
-            padding: '0.5rem 1rem',
-            borderRadius: 22,
-            fontSize: '1.05rem',
-            fontFamily: 'monospace'
+          <div>
+            <span className="circle-loader" />
+          </div>
+        </div>
+      )}
+      {uploading && (
+        <div style={{
+          position: "fixed",
+          top: 0, left: 0, width: "100vw", height: "100vh",
+          background: "rgba(102,197,204,0.14)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 1000
+        }}>
+          <span className="circle-loader" />
+          <div style={{textAlign:'center',marginTop:'1.2rem',fontWeight:600, color: COLORS.aqua}}>Uploading...</div>
+        </div>
+      )}
+
+      <div style={{
+        width: '98vw',
+        maxWidth: '1150px',
+        minHeight: '90vh',
+        margin: '0 auto',
+        padding: '2.5rem 2vw',
+        background: COLORS.white,
+        boxShadow: `0 10px 28px ${COLORS.gray}33`,
+        borderRadius: 24,
+        position: 'relative',
+      }}>
+
+        <header style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1.6rem',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1.4rem',
           }}>
-            {account.slice(0, 6)}...{account.slice(-4)}
-          </span>
-        ) : (
-          <button
-            onClick={connectWallet}
+            <img
+              src="https://media.istockphoto.com/id/913682290/vector/notes-icon.jpg?s=612x612&w=0&k=20&c=aZuKUzCM3VTY4ZITfYANxScKcZdifWSv-idMJyvxIEU="
+              alt="Notes Logo"
+              style={{
+                width: 52, height: 52, borderRadius: '50%',
+                border: `3.5px solid ${COLORS.aqua}`,
+                background: COLORS.yellow,
+              }}
+            />
+            <h1 style={{
+              fontWeight: '900',
+              fontSize: '2.4rem',
+              color: COLORS.black,
+              letterSpacing: '-1.2px',
+              margin: 0
+            }}>
+              Notes Sharing DApp
+            </h1>
+          </div>
+          {account ? (
+            <span style={{
+              display: 'flex', alignItems: 'center',
+              padding: "0.5rem 0.9rem", borderRadius: 22,
+              backgroundColor: COLORS.aqua, color: COLORS.white,
+              fontWeight: 700, fontSize: '1.04rem', fontFamily: 'monospace'
+            }}>
+              <img
+                src={`https://api.dicebear.com/7.x/identicon/svg?seed=${account}`}
+                style={{width:28, height:28, marginRight:9, borderRadius:10}}
+                alt="User avatar"
+              />
+              {account.slice(0, 6)}...{account.slice(-4)}
+            </span>
+          ) : (
+            <button
+              onClick={connectWallet}
+              style={{
+                backgroundColor: COLORS.peach,
+                color: COLORS.white,
+                border: 'none',
+                borderRadius: 22,
+                padding: '0.85rem 2.2rem',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '1.1rem'
+              }}
+            >
+              Connect Wallet
+            </button>
+          )}
+        </header>
+
+        <div style={{
+          margin: "0.7rem 0 2rem 0",
+          background: COLORS.yellow,
+          color: COLORS.black,
+          padding: "1rem 1.3rem",
+          borderRadius: 10,
+          fontWeight: "bold",
+          fontSize: "1.05rem",
+          boxShadow: `0 2px 13px ${COLORS.yellow}33`,
+          textAlign: "center",
+          letterSpacing: "0.01em"
+        }}>
+          Share your notes securely and reward your peers!
+        </div>
+
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-start',
+          gap: '2.2rem',
+          fontSize: '1.11rem',
+          fontWeight: '500',
+          marginBottom: '1.2rem',
+          color: COLORS.gray
+        }}>
+          <div><span style={{ fontWeight: 700, color: COLORS.aqua }}>{stats.notes}</span> Notes Shared</div>
+          <div><span style={{ fontWeight: 700, color: COLORS.peach }}>{stats.totalLikes}</span> Likes</div>
+          <div><span style={{ fontWeight: 700, color: COLORS.gray }}>{stats.totalDislikes}</span> Dislikes</div>
+        </div>
+
+        <form onSubmit={uploadNote} style={{
+          marginBottom: '2rem',
+          display: 'flex',
+          gap: '1rem',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}>
+          <input
+            type="file"
+            onChange={e => {
+              setFile(e.target.files[0]);
+              setFilename(e.target.files[0] ? e.target.files[0].name : '');
+            }}
             style={{
-              backgroundColor: '#0984e3',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 22,
-              padding: '0.7rem 1.5rem',
+              flexGrow: 1,
+              padding: '1rem 1.2rem',
+              borderRadius: 18,
+              border: `2px solid ${COLORS.aqua}`,
+              fontSize: '1.13rem',
               cursor: 'pointer',
+              color: COLORS.black
+            }}
+            required
+            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+          />
+          <button
+            type="submit"
+            disabled={uploading}
+            style={{
+              backgroundColor: COLORS.peach,
+              color: COLORS.white,
               fontWeight: 700,
-              fontSize: '1.1rem',
-              boxShadow: '0 8px 20px rgba(9,132,227,0.18)'
+              fontSize: '1.15rem',
+              padding: '1rem 2.2rem',
+              borderRadius: 18,
+              border: 'none',
+              cursor: uploading ? 'wait' : 'pointer',
+              boxShadow: '0 2px 8px #F89C7450'
             }}
           >
-            Connect Wallet
+            Upload & Get Reward
           </button>
-        )}
-      </header>
+        </form>
 
-      <form onSubmit={uploadNote} style={{
-        marginBottom: '2rem',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '1rem',
-        alignItems: 'center'
-      }}>
-        <input
-          type="file"
-          onChange={e => {
-            setFile(e.target.files[0]);
-            setFilename(e.target.files[0] ? e.target.files[0].name : '');
-          }}
-          style={{
-            flexGrow: 1,
-            padding: '1rem 1.2rem',
-            borderRadius: 16,
-            border: '1.8px solid #dfe6e9',
-            fontSize: '1.25rem',
-            cursor: 'pointer'
-          }}
-          required
-        />
-        <button
-          type="submit"
-          disabled={uploading}
-          style={{
-            backgroundColor: '#0984e3',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: '1.2rem',
-            padding: '1rem 2rem',
-            borderRadius: 18,
-            border: 'none',
-            cursor: uploading ? 'wait' : 'pointer',
-            boxShadow: '0 8px 25px rgba(9,132,227,0.09)'
-          }}
-        >
-          {uploading ? <span className="loader" /> : 'Upload & Get Reward'}
-        </button>
-      </form>
-
-      <section>
-        <h2 style={{
-          fontWeight: 700,
-          fontSize: '2rem',
-          marginBottom: '1rem',
-          color: '#222',
-          borderBottom: '2px solid #0984e3',
-          maxWidth: '300px'
+        <div style={{
+          marginBottom: '1.1rem',
+          display: 'flex',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
         }}>
-          Shared Notes
-        </h2>
-        {loading ? (
-          <div style={{margin:"2rem auto", textAlign:"center"}}>
-            <span className="loader"/> <p>Loading notes...</p>
-          </div>
-        ) : notes.length === 0 ? (
-          <p style={{ color: "#636e72" }}>No notes shared yet.</p>
-        ) : (
-          <ul style={{
-            listStyle: 'none',
-            paddingLeft: 0,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: '1.3rem',
+          <input
+            type="search"
+            placeholder="Search notes by filename..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: '310px',
+              padding: '0.7rem 1rem',
+              borderRadius: 17,
+              border: `2px solid ${COLORS.aqua}`,
+              fontSize: '1.13rem',
+              color: COLORS.black,
+              outline: 'none'
+            }}
+            aria-label="Search notes"
+          />
+        </div>
+
+        <section style={{ flexGrow: 1 }}>
+          <h2 style={{
+            fontWeight: 700,
+            fontSize: '1.6rem',
+            marginBottom: '1.1rem',
+            color: COLORS.black,
+            borderBottom: `2.5px solid ${COLORS.gray}`,
+            maxWidth: '300px'
           }}>
-            {notes.map(({ uploader, filename, ipfsHash, likes, dislikes }, idx) => (
-              <li key={idx} style={{
-                boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
-                borderRadius: 20,
-                padding: '1.4rem 2rem',
-                backgroundColor: '#f9f9f9',
-              }}>
-                <div style={{
-                  fontWeight: 700,
-                  fontSize: '1.15rem',
-                  marginBottom: 6,
-                  color: '#222'
-                }}>{filename}</div>
-                <div style={{ fontSize: '0.97rem', color: '#636e72', marginBottom: 8 }}>
-                  Uploader: {uploader.slice(0, 8)}...{uploader.slice(-4)}
-                </div>
-                {ipfsHash ? (
-                  <a
-                    href={`https://gateway.pinata.cloud/ipfs/${ipfsHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      backgroundColor: '#0984e3',
-                      color: '#fff',
-                      textDecoration: 'none',
-                      fontWeight: 600,
-                      padding: '0.7rem 1.3rem',
-                      borderRadius: 16,
-                      fontSize: '1rem',
-                      display: 'inline-block',
-                      marginTop: 4
+            Shared Notes
+          </h2>
+          {filteredNotes.length === 0 ? (
+            <p style={{ color: COLORS.gray, fontSize: '1.18rem' }}>No notes found.</p>
+          ) : (
+            <ul style={{
+              listStyle: 'none',
+              paddingLeft: 0,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))',
+              gap: '1.7rem',
+            }}>
+              {filteredNotes.map(({ uploader, filename, ipfsHash, likes, dislikes }, idx) => (
+                <li key={idx} style={{
+                  boxShadow: `0 6px 30px ${COLORS.aqua}29`,
+                  borderRadius: 21,
+                  padding: '1.25rem 1.75rem',
+                  backgroundColor: COLORS.white,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  height: '100%',
+                  border: `2px solid ${COLORS.yellow}`,
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    position: 'absolute', top: 16, right: 18, fontSize: "1.8rem", opacity: .25
+                  }}>
+                    {fileIcon(filename)}
+                  </div>
+                  <div>
+                    <div style={{
+                      fontWeight: 700,
+                      fontSize: '1.13rem',
+                      marginBottom: 8,
+                      color: COLORS.black,
+                      wordBreak: 'break-word',
+                      display: "flex", alignItems: "center", gap: "0.70rem"
                     }}>
-                    View Note
-                  </a>
-                ) : (
-                  <span style={{ color: '#d63031', fontWeight: 700, fontSize: '1rem' }}>Missing file hash</span>
-                )}
-                <div style={{marginTop:14,display:"flex",alignItems:"center",gap:"1rem"}}>
-                  <button style={{
-                    padding: '0.6rem 1.25rem',
-                    borderRadius: 14,
-                    border:"none",
-                    background: "#C7FFD3",
-                    fontWeight: "bold",
-                    color: "#00882E",
-                    cursor: actionIndex === idx ? 'wait' : 'pointer'
-                  }} onClick={()=>likeNote(idx)} disabled={actionIndex === idx}>
-                    {actionIndex === idx ? <span className="loader" style={{width:18,height:18,borderWidth:2,marginRight:5}}/> : '👍 '}{likes}
-                  </button>
-                  <button style={{
-                    padding: '0.6rem 1.25rem',
-                    borderRadius: 14,
-                    border:"none",
-                    background: "#FFD0D0",
-                    fontWeight:"bold",
-                    color: "#D63031",
-                    cursor: actionIndex === idx ? 'wait' : 'pointer'
-                  }} onClick={()=>dislikeNote(idx)} disabled={actionIndex === idx}>
-                    {actionIndex === idx ? <span className="loader" style={{width:18,height:18,borderWidth:2,marginRight:5}}/> : '👎 '}{dislikes}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                      <span>{filename}</span>
+                    </div>
+                    <div style={{
+                      fontSize: '0.98rem',
+                      color: COLORS.gray,
+                      marginBottom: 10,
+                      display: "flex", gap: "0.4rem", alignItems: "center"
+                    }}>
+                      <img
+                        src={`https://api.dicebear.com/7.x/identicon/svg?seed=${uploader}`}
+                        style={{ width: 19, height: 19, borderRadius: 5 }}
+                        alt="Uploader avatar"
+                      />
+                      Uploader: {uploader.slice(0, 8)}...{uploader.slice(-4)}
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: 10 }}>
+                      {ipfsHash ? (
+                        <>
+                          <a
+                            href={`https://gateway.pinata.cloud/ipfs/${ipfsHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              backgroundColor: COLORS.aqua,
+                              color: COLORS.white,
+                              textDecoration: 'none',
+                              fontWeight: 600,
+                              padding: '0.6rem 1.1rem',
+                              borderRadius: 17,
+                              fontSize: '1.01rem',
+                              display: 'inline-block',
+                              transition: 'background-color 0.3s',
+                              cursor: 'pointer',
+                            }}
+                            aria-label={`View note ${filename}`}
+                          >
+                            View Note
+                          </a>
+                          <button
+                            onClick={() => downloadNote(ipfsHash, filename)}
+                            style={{
+                              backgroundColor: COLORS.peach,
+                              color: COLORS.white,
+                              fontWeight: 600,
+                              padding: '0.6rem 1.1rem',
+                              borderRadius: 17,
+                              fontSize: '1.01rem',
+                              border: 'none',
+                              cursor: 'pointer',
+                              marginLeft: '.4rem',
+                            }}
+                            aria-label={`Download note ${filename}`}
+                          >
+                            Download
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ color: COLORS.peach, fontWeight: 700, fontSize: '1.05rem' }}>Missing file hash</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: 10 }}>
+                    <button
+                      style={{
+                        padding: '0.55rem 1.09rem',
+                        borderRadius: 10,
+                        border: "none",
+                        background: COLORS.aqua,
+                        fontWeight: "bold",
+                        color: COLORS.white,
+                        cursor: actionIndex === idx ? 'wait' : 'pointer',
+                        gap: '0.44rem',
+                        fontSize: '1rem',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => likeNote(idx)}
+                      disabled={actionIndex === idx}
+                      aria-label={`Like note ${filename}`}
+                    >
+                      {actionIndex === idx ? <span className="circle-loader" style={{ width: 18, height: 18, borderWidth: 2, display:'inline-block', marginRight:5 }} /> : '👍'} {likes}
+                    </button>
+                    <button
+                      style={{
+                        padding: '0.55rem 1.09rem',
+                        borderRadius: 10,
+                        border: "none",
+                        background: COLORS.gray,
+                        fontWeight: "bold",
+                        color: COLORS.black,
+                        cursor: actionIndex === idx ? 'wait' : 'pointer',
+                        gap: '0.44rem',
+                        fontSize: '1rem',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => dislikeNote(idx)}
+                      disabled={actionIndex === idx}
+                      aria-label={`Dislike note ${filename}`}
+                    >
+                      {actionIndex === idx ? <span className="circle-loader" style={{ width: 18, height: 18, borderWidth: 2, display:'inline-block', marginRight:5 }} /> : '👎'} {dislikes}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
